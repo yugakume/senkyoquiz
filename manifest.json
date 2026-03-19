@@ -1,0 +1,27 @@
+{
+  "name": "衆議院小選挙区 当選者クイズ",
+  "short_name": "選挙クイズ",
+  "description": "第51回衆議院議員総選挙の小選挙区当選者を覚えよう。全289選挙区を都道府県別・ブロック別・全国ランダムで出題。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1628",
+  "theme_color": "#0a1628",
+  "orientation": "portrait",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "https://d2xsxph8kpxj0f.cloudfront.net/310519663287896154/nbjZG3PrxwapekxcosX7Mw/pwa-icon-512-cZ6zHZeDG9vwwVFSQU7GBY.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://d2xsxph8kpxj0f.cloudfront.net/310519663287896154/nbjZG3PrxwapekxcosX7Mw/pwa-icon-512-cZ6zHZeDG9vwwVFSQU7GBY.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["education", "games"],
+  "screenshots": []
+}
