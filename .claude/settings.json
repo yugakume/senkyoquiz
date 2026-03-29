@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/user/senkyoquiz/.claude/hooks/check_draft.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
