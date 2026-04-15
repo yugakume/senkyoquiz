@@ -5,6 +5,8 @@ const CACHE_NAME = 'senkyo-quiz-v1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
+  '/privacy.html',
+  '/ads.txt',
 ];
 
 // Install: cache static assets
