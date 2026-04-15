@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/privacy.html',
+  '/ads.txt',
 ];
 
 // Install: cache static assets
