@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>衆議院議員当選者クイズ</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- iOS PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="選挙クイズ" />
+
+    <!-- iOS app icon (used when added to home screen) -->
+    <link rel="apple-touch-icon" href="https://d2xsxph8kpxj0f.cloudfront.net/310519663287896154/nbjZG3PrxwapekxcosX7Mw/pwa-icon-512-cZ6zHZeDG9vwwVFSQU7GBY.png" />
+
+    <!-- iOS splash screen color -->
+    <meta name="theme-color" content="#0a1628" />
+
+    <!-- General SEO / OGP -->
+    <meta name="description" content="第51回衆議院議員総選挙の小選挙区当選者を覚えよう。全289選挙区を都道府県別・ブロック別・全国ランダムで出題。" />
+    <meta property="og:title" content="衆議院議員当選者クイズ" />
+    <meta property="og:description" content="全289小選挙区の当選者を覚えよう。都道府県別・ブロック別・全国ランダムで出題。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://d2xsxph8kpxj0f.cloudfront.net/310519663287896154/nbjZG3PrxwapekxcosX7Mw/pwa-icon-512-cZ6zHZeDG9vwwVFSQU7GBY.png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Register Service Worker for PWA -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').then(function(registration) {
+            console.log('SW registered:', registration.scope);
+          }).catch(function(err) {
+            console.log('SW registration failed:', err);
+          });
+        });
+      }
+    </script>
+
+    <script
+      defer
+      src="%VITE_ANALYTICS_ENDPOINT%/umami"
+      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+  </body>
+
+</html>
