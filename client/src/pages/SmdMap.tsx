@@ -2,9 +2,11 @@
  * SmdMap.tsx — 小選挙区マップ（当選党で塗り分け＋タップで開票結果）
  * Design: Election Broadcast Dashboard
  * 境界データ: gtfs-gis.jp/senkyoku（令和4年改訂289区, CC0 / 原典 東京大学 西沢明）
+ * ピンチ/ホイールで拡大縮小・ドラッグで移動（依存追加なしの自前実装）
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Minus, RotateCcw } from "lucide-react";
 import BroadcastHeader from "@/components/BroadcastHeader";
 import { DISTRICT_SHAPES, MAP_VIEWBOX, OKINAWA_INSET } from "@/lib/district_map";
 import { getPartyColor } from "@/lib/types";
@@ -24,9 +26,38 @@ const LEGEND = (() => {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 })();
 
+// viewBox は "0 0 W H"
+const [, , VBW, VBH] = MAP_VIEWBOX.split(" ").map(Number);
+const MIN_K = 1;
+const MAX_K = 9;
+
+interface Transform {
+  k: number;
+  x: number;
+  y: number;
+}
+
+// 拡大時に地図が枠外へ飛ばないようクランプ
+function clampTf(t: Transform): Transform {
+  const k = Math.min(Math.max(t.k, MIN_K), MAX_K);
+  const minX = VBW * (1 - k);
+  const minY = VBH * (1 - k);
+  return {
+    k,
+    x: Math.min(0, Math.max(minX, t.x)),
+    y: Math.min(0, Math.max(minY, t.y)),
+  };
+}
+
 export default function SmdMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeParty, setActiveParty] = useState<string | null>(null);
+  const [tf, setTf] = useState<Transform>({ k: 1, x: 0, y: 0 });
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchDist = useRef<number | null>(null);
+  const panned = useRef(false); // 直近ジェスチャで移動したか（タップ選択の抑止用）
 
   const selected = selectedId ? DISTRICT_BY_ID.get(selectedId) : null;
 
@@ -38,17 +69,91 @@ export default function SmdMap() {
     );
   }, [selectedId]);
 
+  // 画面座標 → SVG(viewBox)座標
+  const toSvg = useCallback((cx: number, cy: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { x: ((cx - r.left) / r.width) * VBW, y: ((cy - r.top) / r.height) * VBH };
+  }, []);
+
+  // (sx,sy) を固定点として factor 倍ズーム
+  const zoomAt = useCallback((sx: number, sy: number, factor: number) => {
+    setTf((t) => {
+      const k2 = Math.min(Math.max(t.k * factor, MIN_K), MAX_K);
+      const x2 = sx - (sx - t.x) * (k2 / t.k);
+      const y2 = sy - (sy - t.y) * (k2 / t.k);
+      return clampTf({ k: k2, x: x2, y: y2 });
+    });
+  }, []);
+
+  // ホイールズーム（passive:false が必要なのでネイティブに登録）
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const p = toSvg(ev.clientX, ev.clientY);
+      zoomAt(p.x, p.y, ev.deltaY < 0 ? 1.15 : 1 / 1.15);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [toSvg, zoomAt]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    svgRef.current?.setPointerCapture(e.pointerId);
+    if (pointers.current.size === 0) panned.current = false;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = Array.from(pointers.current.values());
+      pinchDist.current = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const prev = pointers.current.get(e.pointerId);
+    if (!prev) return;
+    const nx = e.clientX, ny = e.clientY;
+
+    if (pointers.current.size >= 2) {
+      pointers.current.set(e.pointerId, { x: nx, y: ny });
+      const [a, b] = Array.from(pointers.current.values());
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDist.current) {
+        const mid = toSvg((a.x + b.x) / 2, (a.y + b.y) / 2);
+        zoomAt(mid.x, mid.y, dist / pinchDist.current);
+      }
+      pinchDist.current = dist;
+      panned.current = true;
+      return;
+    }
+
+    // 1本指: パン
+    const dx = nx - prev.x, dy = ny - prev.y;
+    pointers.current.set(e.pointerId, { x: nx, y: ny });
+    if (Math.abs(dx) + Math.abs(dy) > 2) panned.current = true;
+    const r = svgRef.current!.getBoundingClientRect();
+    const sdx = (dx / r.width) * VBW;
+    const sdy = (dy / r.height) * VBH;
+    setTf((t) => clampTf({ ...t, x: t.x + sdx, y: t.y + sdy }));
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchDist.current = null;
+  };
+
+  const zoomButton = (factor: number) => zoomAt(VBW / 2, VBH / 2, factor);
+  const reset = () => setTf({ k: 1, x: 0, y: 0 });
+
   return (
     <div className="min-h-screen flex flex-col bg-background broadcast-grid">
-      <BroadcastHeader
-        title="小選挙区マップ"
-        subtitle="当選党で塗り分け"
-        showBack
-      />
+      <BroadcastHeader title="小選挙区マップ" subtitle="当選党で塗り分け" showBack />
 
-      <main className="flex-1 container max-w-2xl py-5">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-5 lg:max-w-[1600px] lg:px-8">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-6 lg:items-start">
+          {/* 左: 凡例 + 地図 */}
+          <div className="min-w-0">
         {/* 凡例 */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className="flex flex-wrap gap-1.5 mb-3 lg:shrink-0">
           {LEGEND.map(([party, n]) => {
             const on = activeParty === party;
             return (
@@ -59,10 +164,7 @@ export default function SmdMap() {
                   on ? "border-white/60 bg-white/10" : "border-white/10 bg-card/60"
                 }`}
               >
-                <span
-                  className="w-2.5 h-2.5 rounded-sm"
-                  style={{ backgroundColor: getPartyColor(party) }}
-                />
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: getPartyColor(party) }} />
                 <span className="font-medium">{party}</span>
                 <span className="tabular-nums text-muted-foreground">{n}</span>
               </button>
@@ -71,68 +173,107 @@ export default function SmdMap() {
         </div>
 
         {/* 地図 */}
-        <div className="rounded-xl border border-border bg-card/40 p-2">
+        <div className="relative rounded-xl border border-border bg-card/40 p-2 overflow-hidden lg:h-[calc(100vh-11rem)] lg:flex lg:items-center lg:justify-center">
+          {/* ズームコントロール */}
+          <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
+            <ZoomBtn label="拡大" onClick={() => zoomButton(1.5)}><Plus className="w-4 h-4" /></ZoomBtn>
+            <ZoomBtn label="縮小" onClick={() => zoomButton(1 / 1.5)}><Minus className="w-4 h-4" /></ZoomBtn>
+            <ZoomBtn label="リセット" onClick={reset}><RotateCcw className="w-3.5 h-3.5" /></ZoomBtn>
+          </div>
+
           <svg
+            ref={svgRef}
             viewBox={MAP_VIEWBOX}
-            className="w-full h-auto select-none"
+            className="w-full h-auto lg:h-full lg:w-full select-none touch-none cursor-grab active:cursor-grabbing"
             role="img"
             aria-label="全国289小選挙区の当選党マップ"
-            onClick={() => setSelectedId(null)}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onClick={() => {
+              if (panned.current) return;
+              setSelectedId(null);
+            }}
           >
-            {ordered.map((s) => {
-              const isSel = s.id === selectedId;
-              const dim = activeParty != null && s.party !== activeParty;
-              return (
-                <path
-                  key={s.id}
-                  d={s.d}
-                  fill={getPartyColor(s.party)}
-                  fillOpacity={dim ? 0.12 : 1}
-                  stroke={isSel ? "#ffffff" : "rgba(10,22,40,0.55)"}
-                  strokeWidth={isSel ? 3 : 0.5}
-                  className="cursor-pointer transition-[fill-opacity]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedId(s.id);
-                  }}
-                >
-                  <title>{`${s.name}（${s.party}）`}</title>
-                </path>
-              );
-            })}
+            <g transform={`translate(${tf.x} ${tf.y}) scale(${tf.k})`}>
+              {ordered.map((s) => {
+                const isSel = s.id === selectedId;
+                const dim = activeParty != null && s.party !== activeParty;
+                return (
+                  <path
+                    key={s.id}
+                    d={s.d}
+                    fill={getPartyColor(s.party)}
+                    fillOpacity={dim ? 0.12 : 1}
+                    stroke={isSel ? "#ffffff" : "rgba(10,22,40,0.55)"}
+                    strokeWidth={isSel ? 3 : 0.5}
+                    vectorEffect="non-scaling-stroke"
+                    className="cursor-pointer transition-[fill-opacity]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (panned.current) return;
+                      setSelectedId(s.id);
+                    }}
+                  >
+                    <title>{`${s.name}（${s.party}）`}</title>
+                  </path>
+                );
+              })}
 
-            {/* 沖縄インセット枠 */}
-            <rect
-              x={OKINAWA_INSET.x}
-              y={OKINAWA_INSET.y}
-              width={OKINAWA_INSET.w}
-              height={OKINAWA_INSET.h}
-              fill="none"
-              stroke="rgba(255,255,255,0.25)"
-              strokeWidth={1}
-              rx={6}
-            />
-            <text
-              x={OKINAWA_INSET.x + 6}
-              y={OKINAWA_INSET.y + 16}
-              fontSize={13}
-              fill="rgba(255,255,255,0.6)"
-            >
-              沖縄
-            </text>
+              {/* 沖縄インセット枠 */}
+              <rect
+                x={OKINAWA_INSET.x}
+                y={OKINAWA_INSET.y}
+                width={OKINAWA_INSET.w}
+                height={OKINAWA_INSET.h}
+                fill="none"
+                stroke="rgba(255,255,255,0.25)"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+                rx={6}
+              />
+              <text x={OKINAWA_INSET.x + 6} y={OKINAWA_INSET.y + 16} fontSize={13} fill="rgba(255,255,255,0.6)">
+                沖縄
+              </text>
+            </g>
           </svg>
         </div>
 
-        <p className="text-[11px] text-muted-foreground mt-2 text-center">
-          区をタップで開票結果を表示・凡例で政党を絞り込み
-          <br />
-          境界データ: gtfs-gis.jp（令和4年区割り, CC0 / 原典 東京大学 西沢明）
-        </p>
+            <p className="text-[11px] text-muted-foreground mt-2 text-center lg:shrink-0">
+              区をタップで開票結果・ピンチ／ホイールで拡大・ドラッグで移動
+              <br />
+              境界データ: gtfs-gis.jp（令和4年区割り, CC0 / 原典 東京大学 西沢明）
+            </p>
+          </div>
 
-        {/* 選択区の詳細 */}
-        {selected && <DistrictDetail district={selected} />}
+          {/* 右(PC): 選択区の詳細サイドバー / モバイルは地図の下に表示 */}
+          <aside className="lg:h-[calc(100vh-11rem)] lg:overflow-y-auto lg:pr-1">
+            {selected ? (
+              <DistrictDetail district={selected} />
+            ) : (
+              <div className="hidden lg:flex h-full items-center justify-center rounded-lg border border-dashed border-border/50 text-sm text-muted-foreground text-center px-4">
+                区をクリックすると
+                <br />
+                開票結果が表示されます
+              </div>
+            )}
+          </aside>
+        </div>
       </main>
     </div>
+  );
+}
+
+function ZoomBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      aria-label={label}
+      onClick={onClick}
+      className="w-8 h-8 flex items-center justify-center rounded-md border border-border bg-card/90 backdrop-blur-sm text-foreground hover:bg-card active:scale-95 transition"
+    >
+      {children}
+    </button>
   );
 }
 
