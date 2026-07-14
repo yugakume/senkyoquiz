@@ -6,7 +6,7 @@
 
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { MapPin, Map, Globe, RotateCcw, Swords, List, Percent, BarChart2, UserRound } from "lucide-react";
+import { MapPin, Map, Globe, RotateCcw, Swords, List, Percent, BarChart2, UserRound, MapPinned } from "lucide-react";
 import BroadcastHeader from "@/components/BroadcastHeader";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
 
@@ -118,6 +118,15 @@ const INPUT_MODES = [
     href: "/seats",
     color: "from-[#6366f1] to-[#4f46e5]",
     glow: "shadow-[#6366f1]/20",
+  },
+  {
+    id: "map",
+    title: "小選挙区マップ",
+    description: "全289区を当選党の色で塗り分け。区をタップで開票結果",
+    icon: MapPinned,
+    href: "/map",
+    color: "from-[#10b981] to-[#059669]",
+    glow: "shadow-[#10b981]/20",
   },
 ];
 

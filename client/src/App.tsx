@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -17,8 +18,12 @@ import ProportionalBrowse from "./pages/ProportionalBrowse";
 import ProportionalQuiz from "./pages/ProportionalQuiz";
 import SeatChart from "./pages/SeatChart";
 
+// 地図データ(境界SVGパス)が重いので、/map を開いた時だけ読み込む
+const SmdMap = lazy(() => import("./pages/SmdMap"));
+
 function Router() {
   return (
+    <Suspense fallback={null}>
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/mode" component={ModeSelect} />
@@ -30,9 +35,11 @@ function Router() {
       <Route path="/browse/proportional" component={ProportionalBrowse} />
       <Route path="/quiz/proportional" component={ProportionalQuiz} />
       <Route path="/seats" component={SeatChart} />
+      <Route path="/map" component={SmdMap} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
+    </Suspense>
   );
 }
 
